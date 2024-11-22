@@ -1,0 +1,209 @@
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+interface Billable {
+    double calculateBill(double callDuration);
+}
+
+class Person {
+    private String name;
+    private String phoneNumber;
+
+    public Person(String name, String phoneNumber) {
+        this.name = name;
+        this.phoneNumber = phoneNumber;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+}
+
+class Customer extends Person implements Billable {
+    private int customerId;
+    private double callDuration;
+    private double billAmount;
+
+    public Customer(int customerId, String name, String phoneNumber, double callDuration) {
+        super(name, phoneNumber);
+        this.customerId = customerId;
+        this.callDuration = callDuration;
+        this.billAmount = calculateBill(callDuration);
+    }
+
+    @Override
+    public double calculateBill(double callDuration) {
+        double ratePerMinute = 0.5; // Example rate
+        return callDuration * ratePerMinute;
+    }
+
+    public int getCustomerId() {
+        return customerId;
+    }
+
+    public double getCallDuration() {
+        return callDuration;
+    }
+
+    public double getBillAmount() {
+        return billAmount;
+    }
+
+    @Override
+    public String toString() {
+        return "Customer ID: " + customerId +
+                "\nName: " + getName() +
+                "\nPhone Number: " + getPhoneNumber() +
+                "\nCall Duration: " + callDuration + " minutes" +
+                "\nBill Amount: $" + billAmount + "\n";
+    }
+}
+
+class GenericStorage<T> {
+    private ArrayList<T> items;
+
+    public GenericStorage() {
+        items = new ArrayList<>();
+    }
+
+    public void addItem(T item) {
+        items.add(item);
+    }
+
+    public T getItem(int index) {
+        if (index >= 0 && index < items.size()) {
+            return items.get(index);
+        } else {
+            throw new IndexOutOfBoundsException("Invalid index");
+        }
+    }
+
+    public ArrayList<T> getAllItems() {
+        return items;
+    }
+}
+
+public class PhoneBillManagementSystem {
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/PhoneBillDB";
+    private static final String DB_USER = "sanjay"; // Replace with your username
+    private static final String DB_PASSWORD = "1234"; // Replace with your password
+    private Connection connection;
+    private Scanner scanner = new Scanner(System.in);
+    private GenericStorage<Customer> customerStorage = new GenericStorage<>();
+
+    public PhoneBillManagementSystem() {
+        try {
+            connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+            System.out.println("Database connection successful!");
+        } catch (SQLException e) {
+            System.err.println("Database connection failed: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    public void addCustomer() {
+        try {
+            System.out.print("Enter Customer ID: ");
+            int customerId = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
+
+            System.out.print("Enter Name: ");
+            String name = scanner.nextLine();
+
+            System.out.print("Enter Phone Number: ");
+            String phoneNumber = scanner.nextLine();
+
+            System.out.print("Enter Call Duration (in minutes): ");
+            double callDuration = scanner.nextDouble();
+
+            Customer customer = new Customer(customerId, name, phoneNumber, callDuration);
+            customerStorage.addItem(customer);
+            double billAmount = customer.getBillAmount();
+
+            // Save customer to the database
+            String sql = "INSERT INTO Customers (CustomerID, Name, PhoneNumber, CallDuration, BillAmount) VALUES (?, ?, ?, ?, ?)";
+            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            preparedStatement.setInt(1, customerId);
+            preparedStatement.setString(2, name);
+            preparedStatement.setString(3, phoneNumber);
+            preparedStatement.setDouble(4, callDuration);
+            preparedStatement.setDouble(5, billAmount);
+
+            preparedStatement.executeUpdate();
+            System.out.println("Customer added successfully!");
+        } catch (SQLException e) {
+            System.err.println("Error adding customer: " + e.getMessage());
+        }
+    }
+
+    public void displayCustomers() {
+        try {
+            String sql = "SELECT * FROM Customers";
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(sql);
+
+            if (!resultSet.isBeforeFirst()) {
+                System.out.println("No customers found.");
+                return;
+            }
+
+            while (resultSet.next()) {
+                System.out.println("Customer ID: " + resultSet.getInt("CustomerID"));
+                System.out.println("Name: " + resultSet.getString("Name"));
+                System.out.println("Phone Number: " + resultSet.getString("PhoneNumber"));
+                System.out.println("Call Duration: " + resultSet.getDouble("CallDuration") + " minutes");
+                System.out.println("Bill Amount: $" + resultSet.getDouble("BillAmount"));
+                System.out.println();
+            }
+        } catch (SQLException e) {
+            System.err.println("Error retrieving customers: " + e.getMessage());
+        }
+
+        System.out.println("\n--- Local Customer Storage ---");
+        for (Customer customer : customerStorage.getAllItems()) {
+            System.out.println(customer);
+        }
+    }
+
+    public void run() {
+        while (true) {
+            System.out.println("\n--- Phone Bill Management System ---");
+            System.out.println("1. Add Customer");
+            System.out.println("2. Display Customers");
+            System.out.println("3. Exit");
+            System.out.print("Enter your choice: ");
+            int choice = scanner.nextInt();
+
+            switch (choice) {
+                case 1:
+                    addCustomer();
+                    break;
+                case 2:
+                    displayCustomers();
+                    break;
+                case 3:
+                    System.out.println("Exiting system. Goodbye!");
+                    try {
+                        if (connection != null && !connection.isClosed()) {
+                            connection.close();
+                        }
+                    } catch (SQLException e) {
+                        System.err.println("Error closing database connection: " + e.getMessage());
+                    }
+                    return;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        PhoneBillManagementSystem system = new PhoneBillManagementSystem();
+        system.run();
+    }
+}
